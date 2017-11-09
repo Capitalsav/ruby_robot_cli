@@ -202,4 +202,3 @@ class RobotControl
 end
 
 RobotControl.take_field_size_commands
-RobotControl.take_control_commands
