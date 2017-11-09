@@ -17,10 +17,25 @@ class RobotControl
   DIRECTION_EAST      = 'EAST'
   DIRECTION_WEST      = 'WEST'
 
-  CONTROL_COMMAND_PLACE = 0
+  CONTROL_COMMAND_PLACE        = 0
+  PARAM_PLACE_COMMAND_POSITION = 1
+
+
+  X_PLACE_PARAMETER         = 0
+  Y_PLACE_PARAMETER         = 1
+  DIRECTION_PLACE_PARAMETER = 2
+
+
+  VALID_SPLIT_COMMAND_SIZE = 2
+
+  VALID_PARAMS_PLACE_SIZE = 3
 
   TURN_DIRECTION_LEFT   = 'LEFT'
   TURN_DIRECTION_RIGHT  = 'RIGHT'
+
+  CONTROL_COMMANDS_ARRAY = %w[MOVE LEFT RIGHT REPORT PLACE]
+
+  FIRST_FIELD_ARRAY_ELEMENT = 0
 
   @is_place_command = false
 
@@ -33,17 +48,34 @@ class RobotControl
   @robot_position_y = 0
 
   def self.get_field_size_commands
-    puts 'Do you want to select table size 1 - YES 0 - NO'
-    user_choice = Integer(gets.chomp)
-    if user_choice == YES_CHOICE
-      puts 'Enter field size_x'
-      field_x_size = Integer(gets.chomp)
-      puts 'Enter field size_y'
-      field_y_size = Integer(gets.chomp)
-      @field_array = Array.new(field_x_size, EMPTY_FIELD_ELEMENT) { Array.new(field_y_size, EMPTY_FIELD_ELEMENT) }
-    elsif user_choice == NO_CHOICE
-      @field_array = Array.new(DEFAULT_SIZE_X, EMPTY_FIELD_ELEMENT) { Array.new(DEFAULT_SIZE_Y, EMPTY_FIELD_ELEMENT) }
+    loop do
+      puts 'Do you want to select table size 1 - YES 0 - NO'
+      begin
+      user_choice = Integer(gets.chomp)
+      rescue ArgumentError
+        next
+      end
+      if user_choice == YES_CHOICE
+        puts 'Enter field size_x'
+        begin
+        field_x_size = Integer(gets.chomp)
+        rescue ArgumentError
+          next
+        end
+        puts 'Enter field size_y'
+        begin
+        field_y_size = Integer(gets.chomp)
+        rescue ArgumentError
+          next
+        end
+        @field_array = Array.new(field_x_size, EMPTY_FIELD_ELEMENT) { Array.new(field_y_size, EMPTY_FIELD_ELEMENT) }
+        break
+      elsif user_choice == NO_CHOICE
+        @field_array = Array.new(DEFAULT_SIZE_X, EMPTY_FIELD_ELEMENT) { Array.new(DEFAULT_SIZE_Y, EMPTY_FIELD_ELEMENT) }
+        break
+      end
     end
+    get_control_commands
   end
 
   def self.get_control_commands
@@ -51,7 +83,77 @@ class RobotControl
       puts '==========================================================================================================='
       draw
       control_command = String(gets.chomp)
-      command_router(control_command)
+      if valid_control_command(control_command)
+        puts 'WORK'
+        command_router(control_command)
+      else
+        puts 'INVALID COMMAND'
+      end
+    end
+  end
+
+  def self.valid_control_command(control_command)
+    split_command = control_command.split(' ')
+    is_valid_first_part = false
+    CONTROL_COMMANDS_ARRAY.each do |valid|
+      if split_command[CONTROL_COMMAND_PLACE] == valid
+        is_valid_first_part = true
+        break
+      end
+    end
+
+    if !is_valid_first_part
+      return is_valid_first_part
+    end
+
+    if split_command[CONTROL_COMMAND_PLACE] == USER_COMMAND_PLACE
+      if valid_command_place(control_command)
+        return true
+      else
+        return false
+      end
+    else
+      return true
+    end
+  end
+
+  def self.valid_command_place(control_command)
+
+    split_command = control_command.split(' ')
+    if split_command.size != VALID_SPLIT_COMMAND_SIZE
+      return false
+    end
+
+    second_command_part = split_command[PARAM_PLACE_COMMAND_POSITION]
+
+    begin
+      split_second_part = second_command_part.split(',')
+    rescue NoMethodError
+      return false
+    end
+
+    if split_second_part.size != VALID_PARAMS_PLACE_SIZE
+      return false
+    end
+
+    begin
+      split_second_part[X_PLACE_PARAMETER].to_i
+      split_second_part[Y_PLACE_PARAMETER].to_i
+    rescue ArgumentError
+      return false
+    end
+
+    case split_second_part[DIRECTION_PLACE_PARAMETER]
+    when DIRECTION_NORTH
+      return true
+    when DIRECTION_SOUTH
+      return true
+    when DIRECTION_EAST
+      return true
+    when DIRECTION_WEST
+      return true
+    else
+      return false
     end
   end
 
@@ -62,8 +164,11 @@ class RobotControl
         if @is_place_command
           puts 'PLACE ALREADY SET'
         else
-          execute_command_place(command)
-          @is_place_command = true
+          if execute_command_place(command)
+            @is_place_command = true
+          else
+            puts 'NO ROBOT WILL FALL'
+          end
         end
       when USER_COMMAND_MOVE
         move_robot_direction_router
@@ -78,16 +183,28 @@ class RobotControl
 
   def self.execute_command_place(command)
     command_as_array = command.split(' ')
-    command_place_data = command_as_array[1].split(',')
-    x_robot_position = command_place_data[0]
-    y_robot_position = command_place_data[1]
-    @robot_direction  = command_place_data[2]
+    command_place_data = command_as_array[PARAM_PLACE_COMMAND_POSITION].split(',')
+    x_robot_position = Integer(command_place_data[X_PLACE_PARAMETER])
+    y_robot_position = Integer(command_place_data[Y_PLACE_PARAMETER])
+    @robot_direction  = command_place_data[DIRECTION_PLACE_PARAMETER]
 
+    if x_robot_position < 0 || x_robot_position > @field_array.size
+      return false
+    end
+
+    if y_robot_position < 0 || y_robot_position > @field_array[FIRST_FIELD_ARRAY_ELEMENT].size
+      return false
+    end
+    place_robot(x_robot_position, y_robot_position)
+    true
+  end
+
+  def self.place_robot(x_robot_position, y_robot_position)
     y_place = 0
     @field_array.each { |a|
       x_place = 0
       a.each {
-        if (Integer(x_robot_position) == x_place) && (Integer(y_robot_position) == y_place)
+        if x_robot_position == x_place && y_robot_position == y_place
           @field_array[x_place][y_place] = ROBOT_FIELD_ELEMENT
         end
         x_place += 1
@@ -95,6 +212,7 @@ class RobotControl
       y_place += 1
     }
   end
+
 
   def self.move_robot_direction_router
     move_by_x = 0
@@ -189,3 +307,5 @@ end
 
 RobotControl.get_field_size_commands
 RobotControl.get_control_commands
+
+
